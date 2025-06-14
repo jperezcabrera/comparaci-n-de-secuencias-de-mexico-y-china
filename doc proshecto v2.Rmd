@@ -1,233 +1,40 @@
 ---
-title: "Análisis comparativo de las variantes del SARS-CoV-2 que más afectaron a México y China
-"
+title: "Análisis comparativo de las variantes del SARS-CoV-2 que más afectaron a México y China"
 author: "Jaime Pérez Y Sofia Peña"
-date: "2025-06-12"
+date: "2025-06-14"
 output:
-  html_document: default
-  pdf_document: default
+  html_document:
+     toc: true
+    toc_depth: 3
+    toc_float: true
+    collapsed: true
+    smooth_scroll: true
+    theme: journal
+    highlight: kate
+    df_print: paged
+    code_folding: show
 ---
 
-```{r mutaciones}
-library(jpeg)
-library(grid)
 
-img2 <- readJPEG("a.jpeg")
-grid.raster(img2)
-```
+# Introducción
 
-## Muestra del código
+El SARS-CoV-2 ha demostrado una notable capacidad de evolución, generando variantes con características distintivas en diferentes regiones del mundo. Este estudio se centra en comparar las variantes que predominaron en México y China entre 2021 e inicios del 2023, con énfasis en la proteína Spike, clave para la infectividad viral y la respuesta inmune. A través del análisis de secuencias genómicas, buscamos identificar mutaciones específicas que puedan explicar diferencias en la transmisibilidad, severidad y escape inmunológico entre las variantes circulantes en estos dos países.
 
-Este es el codigo que vamo a utilizar, y solo vamos a utilizar una pequeña muestra de las secuancias de nuestras variables, ya que nuestro poder de procesamiento no es el más optimo
+# Contexto
+
+Nuestra plan original era extendernos desde 2020 hasta el 2023. No obstante, decidimos reducir este tramo, principalmente para obtener resultados más significativos y poder enfocarnos en variantes más relevantes. En México, las variantes Omicron BA.1 y BQ.1 fueron dominantes durante las olas epidémicas de finales de 2021 y 2022, respectivamente. Estas variantes se caracterizaron por su alta transmisibilidad y capacidad para evadir la inmunidad previa. Por otro lado, en China, tras la relajación de la política "cero-COVID", las subvariantes BA.2, BA.5.2 y BF.7 impulsaron un aumento significativo de casos. Las diferencias en las estrategias de salud pública, los niveles de inmunización y las dinámicas de transmisión en cada país sugieren que las variantes pudieron evolucionar bajo presiones selectivas distintas. 
+
+#Hipótesis
+
+Las variantes de SARS-CoV-2 que circularon en México presentan un mayor número de mutaciones en la proteína Spike asociadas a escape inmunológico en comparación con las variantes predominantes en China. Esta diferencia reflejaría las presiones selectivas ejercidas por los altos niveles de inmunidad poblacional en México, derivados de la vacunación y la exposición previa al virus, frente a un escenario de restricciones más estrictas y menor inmunidad natural en China durante el mismo periodo. El análisis de las secuencias permitirá corroborar o refutar esta hipótesis, aportando insights sobre la evolución del virus en contextos epidemiológicos contrastantes.
+
+#Procesamiento de datos
+Debido a que todas las secuencias tenían deleciones y/o incersiones, tuvimos que limitar tuestras muestras a 25, ya  ue tomaba demasiado tiempo procesarlas
 
 ##Comparación de variante BA.1 (México) con la de wuhan
 
 
 ```{r ba1, echo=FALSE}
-library(seqinr)
-library(dplyr)
-library(ggplot2)
-
-# Función de alineación tipo Needleman-Wunsch simplificada
-alinea = function(gen, gen2){
-  m = matrix(data=0, nrow=length(gen2)+1, ncol=length(gen)+1)
-  m[1, ] = seq(0,-(length(gen))*2,-2)
-  m[ ,1] = seq(0,-(length(gen2))*2,-2)
-  
-  for (fila in seq(2,nrow(m))){
-    for (col in seq(2,ncol(m))){
-      if (gen[col-1]==gen2[fila-1])
-        diag = m[fila-1,col-1] + 1
-      else
-        diag = m[fila-1,col-1] - 1
-      up = m[fila-1,col] - 2
-      left = m[fila,col-1] - 2
-      m[fila,col] = max(diag,up,left)
-    }  
-  }
-
-  fila = length(gen2)+1
-  col = length(gen)+1
-  solA = solB = c()
-  while(fila>1 || col>1){
-    if (col>1 && fila>1 && gen[col-1]==gen2[fila-1]){
-      solA = c(gen[col-1], solA)
-      solB = c(gen2[fila-1], solB)
-      col = col - 1
-      fila = fila -1
-    }else{
-      if (col>1 && fila>1 && m[fila-1, col-1]>m[fila, col-1] && m[fila-1, col-1]>m[fila-1, col]){
-        solA = c(gen[col-1], solA)
-        solB = c(gen2[fila-1], solB)
-        col = col - 1
-        fila = fila -1
-      }else if (fila==1 || (col>1 && m[fila, col-1] > m[fila-1, col])){
-        solA = c(gen[col-1], solA)
-        solB = c("_", solB)
-        col = col - 1
-      }else if (col==1 || (fila>1 && m[fila, col-1] <= m[fila-1, col])){
-        solA = c("_", solA)
-        solB = c(gen2[fila-1], solB)
-        fila = fila - 1 
-      }
-    }
-  }
-  sol = matrix(data=c(solA,solB),nrow = 2, ncol = length(solA), byrow = TRUE)
-  return (sol)
-}
-
-# Diccionario de codones
-trad = c(UUU="F", UUC="F", UUA="L", UUG="L",
-         UCU="S", UCC="S", UCA="S", UCG="S",
-         UAU="Y", UAC="Y", UAA="STOP", UAG="STOP",
-         UGU="C", UGC="C", UGA="STOP", UGG="W",
-         CUU="L", CUC="L", CUA="L", CUG="L",
-         CCU="P", CCC="P", CCA="P", CCG="P",
-         CAU="H", CAC="H", CAA="Q", CAG="Q",
-         CGU="R", CGC="R", CGA="R", CGG="R",
-         AUU="I", AUC="I", AUA="I", AUG="M",
-         ACU="T", ACC="T", ACA="T", ACG="T",
-         AAU="N", AAC="N", AAA="K", AAG="K",
-         AGU="S", AGC="S", AGA="R", AGG="R",
-         GUU="V", GUC="V", GUA="V", GUG="V",
-         GCU="A", GCC="A", GCA="A", GCG="A",
-         GAU="D", GAC="D", GAA="E", GAG="E",
-         GGU="G", GGC="G", GGA="G", GGG="G")
-
-# DataFrame donde se guardan las mutaciones
-datos = data.frame(
-  mutacion = character(),
-  cambioCodon = character(),
-  cambioAmino = character(),
-  pos = integer(),
-  gen = character()
-)
-
-file = read.fasta("sequence.txt", forceDNAtolower = FALSE)
-file2 = read.fasta("1ba1.fasta", forceDNAtolower = FALSE)
-cat (length(file)%/%12, "vs", length(file2)/12, "secuencias \n")
-vs = length(file2)/12
-
-nMut=1
-total_secuencias = 0
-secuencias_con_indels = 0
-for (i in seq_along(file)){
-  if (i!=3) next
-  gen = file[[i]]
-  info = attr(gen,"Annot")
-  info = unlist(strsplit(info,"\\[|\\]|:|=|\\."));
-  gene = info[which(info=="gene")+1]
-  cat ("Gen",i,gene,"\n")
-  gen[gen=="T"] = "U"
-  cat("Total de nucleótidos (Wuhan):", length(gen), "\n")
-  
-  for (j in seq(i, length(file2), 12)){
-    gen2 = file2[[j]]
-    gen2[gen2=="T"] = "U"
-    
-    total_secuencias = total_secuencias + 1
-    
-    if (length(gen) == length(gen2)){
-      diff = which(gen!=gen2)
-      if (length(diff)>0){ 
-        prevMut=""
-        for (pos in diff){
-          ini = pos - (pos-1)%%3
-          mutacion = paste(gen[pos], "to", gen2[pos], sep="")
-          codOri = paste(gen[ini],gen[ini+1],gen[ini+2],sep="")
-          codMut = paste(gen2[ini],gen2[ini+1],gen2[ini+2],sep="")
-          codonChange = paste(codOri,"to",codMut,sep="")
-          nCod = ((pos-1)%/%3) + 1
-          aminoChange = paste(trad[codOri],nCod,trad[codMut],sep="")
-          if (!is.na(trad[codMut]) && trad[codOri]!=trad[codMut] && prevMut!=aminoChange){
-            datos[nMut, ] = list(mutacion,codonChange,aminoChange, nCod, gene)
-            nMut = nMut + 1
-          }
-          prevMut = aminoChange
-        }
-      }
-    }else{
-      if (secuencias_con_indels>10) next
-      secuencias_con_indels = secuencias_con_indels + 1
-      cat("Mutación de inserción o deleción \n")
-      cat("Wuhan:", length(gen), "vs:", length(gen2),"\n")
-      res = alinea(gen, gen2)
-      diff = which(res[1,]!=res[2,])
-      if (length(diff)>0) cat("Mutaciones en las posiciones:", diff, "\n")
-      
-      prevCod = ""
-      align_gen = res[1, ]
-      align_gen2 = res[2, ]
-      for (k in seq(1, length(align_gen) - 2, by = 3)) {
-        cod1 = paste(align_gen[k:(k + 2)], collapse = "")
-        cod2 = paste(align_gen2[k:(k + 2)], collapse = "")
-        if (grepl("_", cod1) || grepl("_", cod2)) next
-        if (!is.na(trad[cod1]) && !is.na(trad[cod2]) && trad[cod1] != trad[cod2]) {
-          cambio = paste(trad[cod1], k %/% 3 + 1, trad[cod2])
-          if (cambio != prevCod) {
-            #cat(cod1, "to", cod2, cambio, k %/% 3 + 1, gene, "\n")
-            datos[nMut, ] = list(paste(cod1, "to", cod2),
-                                 paste(cod1, "to", cod2),
-                                 cambio, k %/% 3 + 1, gene)
-            nMut = nMut + 1
-            prevCod = cambio
-          }
-        }
-      }
-    }
-  }
-}
-
-cat("Resumen\n")
-cat("Total de secuencias procesadas:", total_secuencias, "\n")
-cat("Secuencias con inserciones/deleciones:", secuencias_con_indels, "\n")
-cat("Porcentaje con INDELs:", round(secuencias_con_indels / total_secuencias * 100, 2), "%\n")
-
-str(datos)
-
-# Frecuencias de cambio de aminoácido
-dfgraph = filter(
-  summarise(
-    select(
-      group_by(datos, cambioAmino),
-      mutacion:gen
-    ),
-    mutacion = first(mutacion),
-    cambioCodon = first(cambioCodon),
-    pos = first(pos),
-    gen = first(gen),
-    cuenta = n()
-  ),
-  cuenta > as.integer(vs * 0.05)
-)
-
-cat ("Solo frecuencias superiores al 10%:",as.integer(vs * 0.05),"\n")
-print(dfgraph)
-
-# Gráfica de mutaciones (nucleótidos)
-p = ggplot(datos)
-p = p + aes(x=mutacion, fill=mutacion, label=after_stat(count))
-p = p + ggtitle(paste("Cambios de nucleótidos Wuhan vs",vs,"secuencias"))
-p = p + labs(x="Mutación", y="Frecuencia", fill="Mutación")
-p = p + geom_bar(stat="count")
-p = p + geom_text(stat="count", vjust=0)
-print(p)
-
-# Gráfica de cambios de aminoácidos con validación
-if (nrow(dfgraph) > 0) {
-  p3 = ggplot(dfgraph)
-  p3 = p3 + aes(x=cambioAmino, y=cuenta, fill=cambioAmino, label=cuenta)
-  p3 = p3 + ggtitle(paste("Cambio de aminoácidos Wuhan vs",vs,"secuencias"))
-  p3 = p3 + labs(x="Amino", y="Frecuencia", fill="Frecuencia")
-  p3 = p3 + geom_bar(stat = "identity")
-  p3 = p3 + geom_text(stat = "identity", vjust=1.5)
-  p3 = p3 + facet_grid(~gen, scales="free", space="free_x")
-  print(p3)
-} else {
-  cat("No hay cambios de aminoácidos con frecuencia mayor al 10% para graficar.\n")
-}
-
-
 ```
 
 ## Comparación de variante BA.2 (China) con la de Wuhan
@@ -439,7 +246,7 @@ if (nrow(dfgraph) > 0) {
 ```
 
 
-## Comparacion de bf.7
+## Comparación de variante BF.7 (China) con la de Wuhan
 
 ```{r ccines}
 library(jpeg)
